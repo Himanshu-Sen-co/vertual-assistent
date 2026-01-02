@@ -54,7 +54,7 @@ export const askToAssistant = async (req, res) => {
 
         const result = await geminiResponse(command, assistentName, userName)
 
-        const matchJson = result.match(/{[\s\S]*?}/);
+        const matchJson = result?.match(/{[\s\S]*?}/);
 
         if(!matchJson){
             return res.status(400).json({response:"Sorry, i can't understand"})
@@ -63,34 +63,34 @@ export const askToAssistant = async (req, res) => {
         const geminiResult = JSON.parse(matchJson[0])
         console.log(geminiResult);
         
-        const type = geminiResult.type
+        const type = geminiResult?.type
 
         switch (type) {
             case "get_date":
                 return res.json({
                     type,
-                    userInput: geminiResult.userInput,
+                    userInput: geminiResult?.userInput,
                     response: `current date is ${moment().format("YYYY-MM-DD")}`
                 });
 
             case "get_time":
                 return res.json({
                     type,
-                    userInput: geminiResult.userInput,
+                    userInput: geminiResult?.userInput,
                     response: `current tine is ${moment().format("hh:mm A")}`
                 });
 
             case "get_day":
                 return res.json({
                     type,
-                    userInput: geminiResult.userInput,
+                    userInput: geminiResult?.userInput,
                     response: `Today is ${moment().format("dddd")}`
                 });
 
             case "get_month":
                 return res.json({
                     type,
-                    userInput: geminiResult.userInput,
+                    userInput: geminiResult?.userInput,
                     response: `current date is ${moment().format("MMMM")}`
                 });
 
