@@ -104,8 +104,8 @@ export const askToAssistant = async (req, res) => {
             case "weather_show":
                 return res.json({
                     type,
-                    userInput: geminiResult.userInput,
-                    response: geminiResult.response
+                    userInput: geminiResult?.userInput,
+                    response: geminiResult?.response
                 });
         
             default:
@@ -113,7 +113,7 @@ export const askToAssistant = async (req, res) => {
         }
 
     } catch (error) {
-        return res.status(500).json({response: " Ask Assistant error !"})
+        return res.status(500).json({response: " Ask Assistant error !" + error })
     }
 }
 
