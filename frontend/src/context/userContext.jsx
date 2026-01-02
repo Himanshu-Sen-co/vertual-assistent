@@ -8,7 +8,7 @@ function UserContext({children}) {
       const [backendImage, setBackendImage] = useState(null)
       const [selectedImage, setSelectedImage] = useState(null)
        const [loading, setLoading] = useState(true);
-    const apiUrl = "http://localhost:8000"
+    const apiUrl = "https://vertual-assistent.onrender.com"
     const handlleCurrentUser = async () =>{
       try {
         const result = await axios.get(`${apiUrl}/api/user/current`, {withCredentials: true})
