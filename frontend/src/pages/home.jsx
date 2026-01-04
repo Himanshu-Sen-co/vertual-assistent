@@ -11,256 +11,213 @@ function Home() {
     const [voices, setVoices] = useState([]);
     const [voicesReady, setVoicesReady] = useState(false);
     const [listening, setListening] = useState(false);
-    const [userText, setUserText] = useState("")
-    const [aiText, setAiText] = useState("")
+    const [userText, setUserText] = useState("");
+    const [aiText, setAiText] = useState("");
 
-
-    // useRef will hold our persistent values across re-renders
     const isSpeakingRef = useRef(false);
-    const recognitionRef = useRef(null); // This will hold the single recognition instance
+    const recognitionRef = useRef(null);
+    const isMountedRef = useRef(true); 
     const synth = window.speechSynthesis;
 
     const handleLogout = async () => {
         try {
+            console.log("Logout process started...");
             await axios.get(`${apiUrl}/api/auth/logout`, { withCredentials: true });
             setUserdata(null);
             navigate("/login");
         } catch (error) {
             setUserdata(null);
-            console.log(error);
+            console.error("Logout error:", error);
         }
     };
 
     const loadVoices = useCallback(() => {
         const availableVoices = speechSynthesis.getVoices();
         if (availableVoices.length > 0) {
-            console.log("✅ Voices loaded:", availableVoices);
+            console.log("✅ Voices loaded successfully");
             setVoices(availableVoices);
             setVoicesReady(true);
         }
     }, []);
 
     const initVoices = useCallback(() => {
-        console.log("🗣 Initializing voices...");
-        // Voices might load asynchronously, so we check and also set up a listener.
+        console.log("Initializing voices...");
         loadVoices();
         if (speechSynthesis.onvoiceschanged !== undefined) {
             speechSynthesis.onvoiceschanged = loadVoices;
         }
     }, [loadVoices]);
 
-
     useEffect(() => {
-        // This effect is just for initializing the voices on component mount
+        console.log("🏠 Home Component Mounted");
+        isMountedRef.current = true;
         initVoices();
-    }, [initVoices]);
 
+        return () => {
+            console.log("🚮 Cleanup: Home Component Unmounting");
+            isMountedRef.current = false;
+            if (recognitionRef.current) {
+                console.log("🛑 Stopping Recognition and removing listeners");
+                recognitionRef.current.onend = null; 
+                recognitionRef.current.stop();
+            }
+            synth.cancel(); 
+        };
+    }, [initVoices, synth]);
 
     const speak = useCallback((text) => {
         if (!voicesReady || !text) {
-            console.warn("Voices not ready or no text to speak.");
+            console.warn("Cannot speak: Voices not ready or empty text");
             return;
         }
 
-        // Stop listening before speaking
         if (recognitionRef.current) {
+            console.log("Silent recognition for AI speech...");
             recognitionRef.current.stop();
         }
 
         const utterance = new SpeechSynthesisUtterance(text);
         
-        // Find a suitable voice
         utterance.voice =
             voices.find(v => v.lang === 'hi-IN') ||
             voices.find(v => v.name.toLowerCase().includes('female')) ||
             voices.find(v => v.name.includes('Google UK English Female')) ||
-            voices.find(v => v.name === 'Google US English') ||
             voices.find(v => v.lang === 'en-US') ||
             voices[0];
 
-        if (!utterance.voice) {
-            console.error("No suitable voice found to speak with.");
-            return;
-        }
-        
         utterance.rate = 1;
         utterance.pitch = 1.1;
         utterance.volume = 1;
 
-        console.log(`🎤 Speaking with voice: ${utterance.voice.name}`);
         isSpeakingRef.current = true;
+        console.log(`🗣️ AI Speaking: "${text}"`);
 
         utterance.onend = () => {
-            setAiText("")
-            console.log("Speech finished.");
+            console.log("🏁 AI finished speaking");
+            if (!isMountedRef.current) return;
+            setAiText("");
             isSpeakingRef.current = false;
-            // Safely restart recognition after speaking
-            if (recognitionRef.current) {
-                try {
-                    recognitionRef.current.start();
-                } catch (error) {
-                    // It might already be stopped, which is fine. The onend handler will restart it.
-                    console.warn("Could not start recognition after speech:", error.name);
+            
+            setTimeout(() => {
+                if (isMountedRef.current && !isSpeakingRef.current) {
+                    try {
+                        console.log("🔄 Restarting recognition after speech");
+                        recognitionRef.current.start();
+                    } catch (error) {
+                        console.warn("Restart failed:", error.name);
+                    }
                 }
-            }
+            }, 500);
         };
         
         synth.speak(utterance);
     }, [voices, voicesReady, synth]);
 
-
     const handleCommand = useCallback(async (transcript) => {
         try {
+            console.log("🤖 Sending command to Gemini:", transcript);
             const data = await getGeminiResponse(transcript);
-            console.log("Gemini Response:", data);
+            console.log("📩 Gemini Response received:", data.response);
             
-            speak(data.response); // Speak the response first
+            speak(data.response);
+            setAiText(data.response);
 
             const { type, userInput } = data;
             let url = '';
 
             switch (type) {
-                case "google_search":
-                    url = `https://www.google.com/search?q=${encodeURIComponent(userInput)}`;
-                    break;
-                case "calculator_open":
-                    url = `https://www.google.com/search?q=calculator`;
-                    break;
-                case "instagram_open":
-                    url = `https://www.instagram.com`;
-                    break;
-                case "facebook_open":
-                    url = `https://www.facebook.com`;
-                    break;
-                case "weather_show":
-                    url = `https://www.google.com/search?q=weather`;
-                    break;
+                case "google_search": url = `https://www.google.com/search?q=${encodeURIComponent(userInput)}`; break;
+                case "calculator_open": url = `https://www.google.com/search?q=calculator`; break;
+                case "instagram_open": url = `https://www.instagram.com`; break;
+                case "facebook_open": url = `https://www.facebook.com`; break;
+                case "weather_show": url = `https://www.google.com/search?q=weather`; break;
                 case "youtube_search":
-                case "youtube_play":
-                    url = `https://www.youtube.com/results?search_query=${encodeURIComponent(userInput)}`;
-                    break;
-                default:
-                    // No action needed for other types
-                    break;
+                case "youtube_play": url = `https://www.youtube.com/results?search_query=${encodeURIComponent(userInput)}`; break;
+                default: console.log("No specific URL action for type:", type); break;
             }
 
             if (url) {
+                console.log("🌐 Opening URL:", url);
                 window.open(url, '_blank');
             }
 
-            setAiText(data.response)
-
         } catch (error) {
-            console.error("Error handling command:", error);
+            console.error("❌ handleCommand Error:", error);
             speak("Sorry, I ran into an error.");
         }
     }, [getGeminiResponse, speak]);
 
-
-    // This useEffect sets up the speech recognition instance and its event listeners ONCE.
     useEffect(() => {
         if (!('speechRecognition' in window || 'webkitSpeechRecognition' in window)) {
-            console.error("Speech Recognition API not supported by this browser.");
+            console.error("Browser does not support Speech Recognition");
             return;
         }
 
+        console.log("⚙️ Setting up Speech Recognition instance");
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         const recognition = new SpeechRecognition();
         
-        recognition.continuous = true;
+        recognition.continuous = false; 
         recognition.interimResults = false;
         recognition.lang = "en-US";
         
-        recognitionRef.current = recognition; // Store the single instance in the ref
+        recognitionRef.current = recognition;
 
         recognition.onstart = () => {
-            console.log("✅ Recognition listening...");
+            console.log("🎙️ Recognition Started: Listening...");
             setListening(true);
         };
 
         recognition.onend = () => {
-            console.log("⏹️ Recognition ended.");
             setListening(false);
-            // Automatically restart recognition only if we are not speaking
-            if (!isSpeakingRef.current) {
-                console.log("Restarting recognition...");
+            console.log("💤 Recognition Ended");
+            
+            if (isMountedRef.current && !isSpeakingRef.current) {
+                console.log("⏳ Scheduling automatic restart...");
                 setTimeout(() => {
-                    try {
-                        recognitionRef.current?.start();
-                    } catch (error) {
-                        if (error.name !== "InvalidStateError") {
-                            console.error("Recognition restart error:", error);
+                    if (isMountedRef.current && !isSpeakingRef.current) {
+                        try { 
+                            recognition.start(); 
+                        } catch (e) {
+                            // Already started error is common and can be ignored
                         }
                     }
-                }, 500); // A small delay to prevent rapid restarts
+                }, 600);
             }
         };
 
         recognition.onerror = (event) => {
-            setListening(false);
-            // The 'aborted' error happens when we programmatically call .stop(), so we can ignore it.
-            // 'no-speech' is also a common, non-critical error.
             if (event.error !== 'aborted' && event.error !== 'no-speech') {
-                console.warn(`⚠️ Recognition Error: ${event.error}`);
+                console.warn(`⚠️ Recognition Error Event: ${event.error}`);
             }
         };
 
         recognition.onresult = (event) => {
             const transcript = event.results[event.results.length - 1][0].transcript.trim();
-            console.log("Heard: " + transcript);
+            console.log("👂 Heard:", transcript);
+            setUserText(transcript);
 
             if (userdata?.assistentName && transcript.toLowerCase().includes(userdata.assistentName.toLowerCase())) {
-                setAiText("")
-                setUserText(transcript)
-                recognition.stop(); // Stop listening while processing the command
+                console.log(`🎯 Wake word "${userdata.assistentName}" detected!`);
+                setAiText("");
+                recognition.stop(); 
                 handleCommand(transcript);
-                setUserText("")
+                setUserText("");
             }
         };
-        // Cleanup function: runs when the component unmounts
-        return () => {
-            console.log("Component unmounting. Stopping recognition for good.");
-            recognition.stop();
-           
-        };
 
-    }, [userdata, handleCommand]); // Dependencies for event handlers
+    }, [userdata?.assistentName, handleCommand]);
 
-
-    // This useEffect controls STARTING the recognition
     useEffect(() => {
-        // Start recognition only when voices are ready and we have user data.
         if (voicesReady && userdata && recognitionRef.current) {
             try {
-                console.log("Attempting to start initial recognition...");
+                console.log("🚀 Initial recognition start trigger");
                 recognitionRef.current.start();
             } catch (error) {
-                // This might fail if it's already started, which is okay.
-                console.warn("Initial recognition start failed:", error.name);
+                console.warn("Initial start attempt failed:", error.name);
             }
         }
     }, [voicesReady, userdata]);
-
-    useEffect(() => {
-        // We only want the fallback to run when everything is ready.
-        if (!voicesReady || !userdata) return;
-
-        const fallbackInterval = setInterval(() => {
-            // Check if recognition should be running but isn't.
-            if (!isSpeakingRef.current && !listening && recognitionRef.current) {
-                console.log("Fallback triggered: Restarting recognition.");
-                try {
-                    recognitionRef.current.start();
-                } catch (error) {
-                    console.warn("Fallback failed to restart recognition:", error.name);
-                }
-            }
-        }, 10000); // Check every 10 seconds
-
-        return () => {
-            clearInterval(fallbackInterval);
-        };
-    }, [listening, voicesReady, userdata]);
 
     return (
         <div className='w-full h-[100vh] bg-gradient-to-t from-[black] to-[#1b1b72] flex flex-col justify-center items-center gap-[15px]' onClick={initVoices}>
@@ -275,7 +232,7 @@ function Home() {
                 {listening ? "Listening..." : `I am ${userdata?.assistentName || 'your assistant'}`}
             </h1>
             {aiText ? <img src={ai1} alt="" className='w-[200px]' /> : <img src={userInput1} alt="" className='w-[200px]'/>}
-            <h1 className='text-white text-[18px] font-bold text-wrap'>{userText?userText:aiText?aiText:null}</h1>
+            <h1 className='text-white text-[18px] font-bold text-wrap'>{userText ? userText : aiText ? aiText : null}</h1>
         </div>
     );
 }

@@ -1,7 +1,10 @@
 import axios from "axios"
+import dotenv from "dotenv"
 
+dotenv.config();
 
 const geminiResponse  = async (command, assistentName, userName) => {
+  console.log(command, assistentName, userName, process.env.GEMINI_API_URL);
     try {
         const geminiUrl = process.env.GEMINI_API_URL
         const prompt = `You are a virtual assistant named ${assistentName} created by ${userName}.
@@ -49,12 +52,18 @@ const geminiResponse  = async (command, assistentName, userName) => {
       }
     ]
         })
-
+        // console.log(result.data.candidates[0].content.parts[0].text);
     return result.data.candidates[0].content.parts[0].text
     } catch (error) {
-        console.log(error);
-        
-    }
+  if (error.response?.status === 429) {
+    return {
+      type: "general",
+      response: "I'm getting too many requests right now, please try again in a moment."
+    };
+  }
+
+  console.error(error.message);
+}
 }
 
 export default geminiResponse
