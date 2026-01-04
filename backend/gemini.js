@@ -3,7 +3,7 @@ import dotenv from "dotenv"
 
 dotenv.config();
 
-dotenv.config();
+// dotenv.config();
 
 const geminiResponse  = async (command, assistentName, userName) => {
   console.log(command, assistentName, userName, process.env.GEMINI_API_URL);
